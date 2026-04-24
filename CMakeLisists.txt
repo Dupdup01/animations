@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.20)
+
+set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "Vcpkg toolchain file")
+
+set(VCPKG_TARGET_TRIPLET "x64-mingw-dynamic")
+set(CMAKE_PREFIX_PATH "C:/vcpkg/installed/x64-mingw-dynamic")
+
+project(manim_cpp)
+set(CMAKE_CXX_STANDARD 20)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CAIRO REQUIRED cairo)
+find_package(FFMPEG REQUIRED)
+
+add_executable(manim_cpp main.cpp)
+
+target_include_directories(manim_cpp PRIVATE
+        ${CAIRO_INCLUDE_DIRS}
+        ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_link_directories(manim_cpp PRIVATE
+        ${CAIRO_LIBRARY_DIRS}
+)
+
+target_link_libraries(manim_cpp PRIVATE
+        ${CAIRO_LIBRARIES}
+        ${FFMPEG_LIBRARIES}
+)
