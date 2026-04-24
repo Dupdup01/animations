@@ -1,1 +1,196 @@
-type shi
+#define _USE_MATH_DEFINES
+#include <cairo/cairo.h>
+#include <cstdio>
+#include <cmath>
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+double easeInOut(double t) {
+    return t < 0.5 ? 2*t*t : 1 - pow(-2*t+2, 2)/2;
+}
+
+double phase(double t, double start, double end) {
+    double p = (t - start) / (end - start);
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    return easeInOut(p);
+}
+
+void drawGrid(cairo_t* cr, int WIDTH, int HEIGHT,
+              double cx, double cy,
+              double X_SCALE, double Y_SCALE)
+{
+    // X axis
+    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
+    cairo_set_line_width(cr, 1.5);
+    cairo_move_to(cr, 60,         cy);
+    cairo_line_to(cr, WIDTH - 60, cy);
+    cairo_stroke(cr);
+
+    // Y axis
+    cairo_move_to(cr, cx, cy - HEIGHT / 2.0 + 40);
+    cairo_line_to(cr, cx, cy + HEIGHT / 2.0 - 40);
+    cairo_stroke(cr);
+
+    // X labels
+    cairo_select_font_face(cr, "Arial", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 22.0);
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+
+    for (int i = -3; i <= 3; i++) {
+        if (i == 0) continue;
+        double px = cx + i * X_SCALE;
+        cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
+        cairo_move_to(cr, px, cy - 7);
+        cairo_line_to(cr, px, cy + 7);
+        cairo_stroke(cr);
+
+        char label[16];
+        snprintf(label, sizeof(label), "%d", i);
+        cairo_text_extents_t ext;
+        cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+        cairo_text_extents(cr, label, &ext);
+        cairo_move_to(cr, px - ext.width / 2.0, cy + 28);
+        cairo_show_text(cr, label);
+    }
+
+    // Y labels
+    for (int i = -2; i <= 2; i++) {
+        if (i == 0) continue;
+        double py = cy - i * Y_SCALE;
+        cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
+        cairo_move_to(cr, cx - 7, py);
+        cairo_line_to(cr, cx + 7, py);
+        cairo_stroke(cr);
+
+        char label[16];
+        snprintf(label, sizeof(label), "%d", i);
+        cairo_text_extents_t ext;
+        cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+        cairo_text_extents(cr, label, &ext);
+        cairo_move_to(cr, cx - ext.width - 16, py + ext.height / 2.0);
+        cairo_show_text(cr, label);
+    }
+
+    // Origin
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+    cairo_move_to(cr, cx + 10, cy + 26);
+    cairo_show_text(cr, "0");
+}
+
+void drawLabel(cairo_t* cr, double cx, double cy, int HEIGHT,
+               const char* text)
+{
+    cairo_select_font_face(cr, "Arial", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 26.0);
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, text, &ext);
+    cairo_move_to(cr, cx - ext.width / 2.0, cy - HEIGHT / 2.0 + 70);
+    cairo_show_text(cr, text);
+}
+
+void drawCurve(cairo_t* cr, int WIDTH,
+               double cx, double cy,
+               double X_SCALE, double Y_SCALE,
+               double duration, double progress,
+               double r, double g, double b,
+               int type) // 2 = 2Hz, 3 = 3Hz, 0 = sum
+{
+    const int STEPS = 1200;
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_set_line_width(cr, 3.0);
+
+    bool started = false;
+    for (int i = 0; i <= STEPS; i++) {
+        double p = (double)i / STEPS;
+        if (p > progress) break;
+
+        double t_val = p * duration;
+        double y_val = 0;
+        if      (type == 2) y_val = sin(2 * 2 * M_PI * t_val);
+        else if (type == 3) y_val = sin(3 * 2 * M_PI * t_val);
+        else                y_val = sin(2 * 2 * M_PI * t_val) + sin(3 * 2 * M_PI * t_val);
+
+        double px = 60 + p * (WIDTH - 120);
+        double py = cy - y_val * Y_SCALE;
+
+        if (!started) { cairo_move_to(cr, px, py); started = true; }
+        else            cairo_line_to(cr, px, py);
+    }
+    cairo_stroke(cr);
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
+
+int main() {
+    const int WIDTH  = 1920;
+    const int HEIGHT = 1080;
+    const int FRAMES = 60 * 14; // 14 seconds at 60 fps
+
+    const double CX       = WIDTH  / 2.0;
+    const double X_SCALE  = 220.0;
+    const double Y_SCALE  = 200.0;
+    const double DURATION = 2.0;
+
+    FILE* ffmpeg = _popen(
+        "ffmpeg -y -f rawvideo -pixel_format bgra "
+        "-video_size 1920x1080 -framerate 60 "
+        "-i pipe:0 -c:v libx264 -pix_fmt yuv420p "
+        "\"C:/Users/chris/CLionProjects/fourierTransform/output_video/interference.mp4\"",
+        "wb"
+    );
+    if (!ffmpeg) { fprintf(stderr, "Failed to open FFmpeg pipe\n"); return 1; }
+
+    for (int frame = 0; frame < FRAMES; frame++) {
+        double t = (double)frame / (FRAMES - 1);
+
+        double p2hz    = phase(t, 0.00, 0.28);
+        double p3hz    = phase(t, 0.20, 0.45);
+        double pScroll = phase(t, 0.45, 0.65);
+        double pSum    = phase(t, 0.72, 1.00);
+
+        double scrollOffset = pScroll * HEIGHT;
+        double topCY        = HEIGHT / 2.0 - scrollOffset;
+        double bottomCY     = HEIGHT / 2.0 - scrollOffset + HEIGHT;
+
+        // Setup drawing
+        cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
+        cairo_t* cr = cairo_create(surface);
+
+        // Background
+        cairo_set_source_rgb(cr, 0.05, 0.05, 0.1);
+        cairo_paint(cr);
+
+        // Clip to screen so curves don't bleed outside during scroll
+        cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
+        cairo_clip(cr);
+
+        // "2 Hz and 3 Hz components"
+        drawGrid (cr, WIDTH, HEIGHT, CX, topCY, X_SCALE, Y_SCALE);
+        drawLabel(cr, CX, topCY, HEIGHT, "2 Hz and 3 Hz components");
+        drawCurve(cr, WIDTH, CX, topCY, X_SCALE, Y_SCALE, DURATION, p2hz, 0.2, 0.6, 1.0, 2);
+        drawCurve(cr, WIDTH, CX, topCY, X_SCALE, Y_SCALE, DURATION, p3hz, 1.0, 0.5, 0.1, 3);
+
+        // "Sum: 2 Hz + 3 Hz"
+        drawGrid (cr, WIDTH, HEIGHT, CX, bottomCY, X_SCALE, Y_SCALE);
+        drawLabel(cr, CX, bottomCY, HEIGHT, "Sum: 2 Hz + 3 Hz");
+        if (pSum > 0)
+            drawCurve(cr, WIDTH, CX, bottomCY, X_SCALE, Y_SCALE, DURATION, pSum, 0.2, 1.0, 0.4, 0);
+
+        // Write frame to ffmpeg
+        cairo_surface_flush(surface);
+        unsigned char* data   = cairo_image_surface_get_data(surface);
+        int            stride = cairo_image_surface_get_stride(surface);
+        for (int row = 0; row < HEIGHT; row++)
+            fwrite(data + row * stride, 1, WIDTH * 4, ffmpeg);
+
+        cairo_destroy(cr);
+        cairo_surface_destroy(surface);
+    }
+
+    _pclose(ffmpeg);
+    system("start \"\" \"C:/Users/chris/CLionProjects/fourierTransform/output_video/interference.mp4\"");
+    printf("Done\n");
+    return 0;
+}
