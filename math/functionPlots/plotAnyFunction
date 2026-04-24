@@ -1,0 +1,95 @@
+#define _USE_MATH_DEFINES
+#include <cairo/cairo.h>
+#include <cstdio>
+#include <cmath>
+
+int main() {
+    const int WIDTH = 1920, HEIGHT = 1080;
+    const int FRAMES = 240;
+
+    FILE* ffmpeg = _popen(
+        "ffmpeg -y -f rawvideo -pixel_format bgra "
+        "-video_size 1920x1080 -framerate 60 "
+        "-i pipe:0 -c:v libx264 -pix_fmt yuv420p "
+        "\"C:/Users/chris/CLionProjects/fourierTransform/output_video/click.mp4\"",
+        "wb"
+    );
+
+    if (!ffmpeg) {
+        fprintf(stderr, "Failed to open FFmpeg pipe\n");
+        return 1;
+    }
+
+    for (int frame = 0; frame < FRAMES; frame++) {
+        double t = (double)frame / (FRAMES - 1);
+
+        double ease = t < 0.5
+            ? 2 * t * t
+            : 1 - pow(-2 * t + 2, 2) / 2;
+
+        cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
+        cairo_t* cr = cairo_create(surface);
+
+        // Background
+        cairo_set_source_rgb(cr, 0.05, 0.05, 0.1);
+        cairo_paint(cr);
+
+        // Axes
+        cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
+        cairo_set_line_width(cr, 1.5);
+
+        // X axis
+        cairo_move_to(cr, 60, HEIGHT / 2.0);
+        cairo_line_to(cr, WIDTH - 60, HEIGHT / 2.0);
+        cairo_stroke(cr);
+
+        // Y axis
+        cairo_move_to(cr, WIDTH / 2.0, 60);
+        cairo_line_to(cr, WIDTH / 2.0, HEIGHT - 60);
+        cairo_stroke(cr);
+
+        const int STEPS = 1000;
+        const double X_SCALE = 600.0;   // horizontal stretch
+        const double Y_SCALE = 200.0;   // amplitude in pixels
+
+        cairo_set_source_rgb(cr, 1.0, 0.7, 0.2);
+        cairo_set_line_width(cr, 3.0);
+
+        bool started = false;
+        for (int i = 0; i <= STEPS; i++) {
+            // How far along the curve we draw this frame (0.0 -> 1.0)
+            double progress = (double)i / STEPS;
+            if (progress > ease) break;
+
+            double x_norm = (progress - 0.5) * 2.0 * M_PI * 2; // -2π to +2π
+            double y_val = [function here]
+
+            double px = WIDTH  / 2.0 + x_norm * X_SCALE / (2 * M_PI);
+            double py = HEIGHT / 2.0 - y_val * Y_SCALE;
+
+            if (!started) {
+                cairo_move_to(cr, px, py);
+                started = true;
+            } else {
+                cairo_line_to(cr, px, py);
+            }
+        }
+        cairo_stroke(cr);
+
+        // --- Write raw BGRA pixels to ffmpeg ---
+        cairo_surface_flush(surface);
+        unsigned char* data = cairo_image_surface_get_data(surface);
+        int stride = cairo_image_surface_get_stride(surface);
+        for (int row = 0; row < HEIGHT; row++) {
+            fwrite(data + row * stride, 1, WIDTH * 4, ffmpeg);
+        }
+
+        cairo_destroy(cr);
+        cairo_surface_destroy(surface);
+    }
+
+    _pclose(ffmpeg);
+    system("start \"\" \"C:/Users/chris/CLionProjects/fourierTransform/output_video/click.mp4\"");
+    printf("Done\n");
+    return 0;
+}
