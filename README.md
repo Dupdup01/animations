@@ -63,8 +63,8 @@
     
                 // Spirograph equations
                 double x1 = (R - r) * cos(angle) + d * cos((R - r) / r * angle);
-                double y1 = (R - r) / sin(angle) - d * sin((R - r) / r * angle);
-                double x2 = (R - r) / cos(next)  + d * cos((R - r) / r * next);
+                double y1 = (R - r) * sin(angle) - d * sin((R - r) / r * angle);
+                double x2 = (R - r) * cos(next)  + d * cos((R - r) / r * next);
                 double y2 = (R - r) * sin(next)  - d * sin((R - r) / r * next);
     
                 // Cycle through colors as the curve progresses
