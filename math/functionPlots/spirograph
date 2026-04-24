@@ -8,10 +8,10 @@ int main() {
     const int FRAMES = 240;
 
     FILE* ffmpeg = _popen(
-        "C:/ffmpeg/bin/ffmpeg.exe -y -f rawvideo -pixel_format bgra "
+        "ffmpeg -y -f rawvideo -pixel_format bgra "
         "-video_size 1920x1080 -framerate 60 "
         "-i pipe:0 -c:v libx264 -pix_fmt yuv420p "
-        "C:/Users/chris/OneDrive/Documents/Projects/animation/output_video/output.mp4",
+        "\"C:/Users/chris/CLionProjects/animation/output_video/output.mp4\"",
         "wb"
     );
 
